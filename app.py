@@ -8,7 +8,6 @@ except ImportError:
     st.error("请先在终端运行: pip install lunarcalendar")
     st.stop()
 
-
 class XiaoLiuRen:
     def __init__(self):
         self.gods = ["大安", "留连", "速喜", "赤口", "小吉", "空亡"]
@@ -38,15 +37,17 @@ class XiaoLiuRen:
         }
 
     def get_shichen_index(self, hour):
-        if hour == 23: return 0
+        # 23点和0点都属于子时（索引为0）
+        if hour == 23 or hour == 0: 
+            return 0
         return (hour + 1) // 2
 
     def calculate(self, lunar_month, lunar_day, shichen_index):
+        # 传统小六壬算法：月上起日，日上起时
         month_index = (lunar_month - 1) % 6
         day_index = (month_index + lunar_day - 1) % 6
         final_index = (day_index + shichen_index) % 6
         return self.gods[final_index]
-
 
 # 初始化
 diviner = XiaoLiuRen()
@@ -59,7 +60,7 @@ st.markdown("---")
 # 选择起卦方式
 mode = st.radio("请选择起卦方式：", ("时间起卦 (使用当前时间)", "数字起卦 (随机报三个数字)"))
 
-# 【核心修改】：使用 session_state 来保存起卦结果
+# 使用 session_state 来保存起卦结果
 if 'final_god' not in st.session_state:
     st.session_state.final_god = None
 if 'divination_info' not in st.session_state:
@@ -68,8 +69,16 @@ if 'divination_info' not in st.session_state:
 if mode == "时间起卦 (使用当前时间)":
     if st.button("⏰ 立即起卦"):
         target_date = datetime.datetime.now()
-        solar_obj = Solar(target_date.year, target_date.month, target_date.day)
+        
+        # 【核心修复】：处理23点后的“子时跨日”问题
+        # 如果当前时间是23点及以后，日期需要往后顺延一天，再去转换农历
+        actual_date_for_lunar = target_date
+        if target_date.hour >= 23:
+            actual_date_for_lunar = target_date + datetime.timedelta(days=1)
+
+        solar_obj = Solar(actual_date_for_lunar.year, actual_date_for_lunar.month, actual_date_for_lunar.day)
         lunar = Converter.Solar2Lunar(solar_obj)
+        
         hour = target_date.hour
         shichen_idx = diviner.get_shichen_index(hour)
 
@@ -84,8 +93,16 @@ else:
         try:
             nums = [int(x) for x in user_input.split()]
             if len(nums) == 3:
+                # 【优化】：数字起卦的大数取余规则（除以6取余，余数为0按6算）
+                month_num = nums[0] % 6 if nums[0] % 6 != 0 else 6
+                day_num = nums[1] % 6 if nums[1] % 6 != 0 else 6
+                hour_num = nums[2] % 6 if nums[2] % 6 != 0 else 6
+                
+                # 转换为索引（索引从0开始，所以减1）
+                shichen_idx = hour_num - 1 
+                
                 # 计算结果并存入“备忘录”
-                st.session_state.final_god = diviner.calculate(nums[0], nums[1], nums[2])
+                st.session_state.final_god = diviner.calculate(month_num, day_num, shichen_idx)
                 st.session_state.divination_info = f"起卦数字: {nums[0]} (起因), {nums[1]} (过程), {nums[2]} (结果)"
             else:
                 st.error("❌ 必须输入正好三个数字！")
@@ -108,13 +125,10 @@ if st.session_state.final_god:
     st.markdown("---")
     st.subheader("👉 请选择你想占卜的具体事项：")
 
-    # 将字典的键值对转换为列表供选择
     matter_labels = [f"{k}. {v}" for k, v in diviner.matters_category.items()]
-
     selected_matter = st.selectbox("选择事项", matter_labels)
 
     if selected_matter:
-        # 提取选中的数字键
         selected_key = selected_matter.split('.')[0]
         matter_name = diviner.matters_category[selected_key]
 
