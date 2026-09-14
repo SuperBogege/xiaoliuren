@@ -1,5 +1,6 @@
 import streamlit as st
 import datetime
+import pytz
 
 # 尝试导入农历转换库
 try:
@@ -68,10 +69,11 @@ if 'divination_info' not in st.session_state:
 
 if mode == "时间起卦 (使用当前时间)":
     if st.button("⏰ 立即起卦"):
-        target_date = datetime.datetime.now()
+        # 【核心修复】：强制获取北京时间（东八区），防止服务器时区错误
+        beijing_tz = pytz.timezone('Asia/Shanghai')
+        target_date = datetime.datetime.now(beijing_tz)
         
         # 【核心修复】：处理23点后的“子时跨日”问题
-        # 如果当前时间是23点及以后，日期需要往后顺延一天，再去转换农历
         actual_date_for_lunar = target_date
         if target_date.hour >= 23:
             actual_date_for_lunar = target_date + datetime.timedelta(days=1)
